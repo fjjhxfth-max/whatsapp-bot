@@ -1,4 +1,4 @@
- const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const http = require('http');
 
@@ -15,7 +15,7 @@ async function connectToWhatsApp() {
     });
 
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "8801618151051"; // আপনার নম্বরটি এখানে বসানো হলো
+        const phoneNumber = "8801618151051"; // আপনার নম্বর
         setTimeout(async () => {
             try {
                 let code = await sock.requestPairingCode(phoneNumber);
@@ -25,7 +25,7 @@ async function connectToWhatsApp() {
             } catch (err) {
                 console.log('Pairing error:', err);
             }
-        }, 5000);
+        }, 8000); // ৮ সেকেন্ড সময় বাড়িয়ে দেওয়া হলো যাতে কোড ভুল না আসে
     }
 
     sock.ev.on('creds.update', saveCreds);
