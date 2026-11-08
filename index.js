@@ -5,7 +5,7 @@ const ALLOWED_KEYWORDS = ['play.google.com', 'yourappdomain.com'];
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
-
+    
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         printQRInTerminal: true,
@@ -55,3 +55,10 @@ async function connectToWhatsApp() {
     });
 }
 connectToWhatsApp();
+
+const http = require('http');
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Bot is running!\n');
+});
+server.listen(process.env.PORT || 3000);
