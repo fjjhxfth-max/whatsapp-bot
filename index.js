@@ -1,17 +1,32 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const http = require('http');
+const readline = require('readline');
 
 const ALLOWED_KEYWORDS = ['play.google.com', 'yourappdomain.com'];
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: true, // এটি দিয়ে লগে কিউআর কোড প্রিন্ট হবে
+        printQRInTerminal: false,
+        browser: Browsers.macOS("Chrome"),
         auth: state
     });
+
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = await question('আপনার হোয়াটসঅ্যাপ নম্বরটি দিন (যেমন: 8801XXXXXXXXX): ');
+        setTimeout(async () => {
+            let code = await sock.requestPairingCode(phoneNumber.trim());
+            console.log(`\n========================================`);
+            console.log(`🔑 আপনার পেয়ারিং কোডটি হলো: ${code}`);
+            console.log(`========================================\n`);
+        }, 3000);
+    }
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -46,13 +61,7 @@ async function connectToWhatsApp() {
     });
 
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        
-        // কিউআর কোড আসলে লগে যেন পরিষ্কার দেখা যায়
-        if (qr) {
-            console.log('--- QR CODE RECEIVED ---');
-        }
-
+        const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) connectToWhatsApp();
@@ -64,7 +73,6 @@ async function connectToWhatsApp() {
 
 connectToWhatsApp();
 
-// রেন্ডার সার্ভার চালু রাখার জন্য সাধারণ HTTP সার্ভার
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running!\n');
