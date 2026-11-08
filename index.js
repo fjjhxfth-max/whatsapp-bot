@@ -9,10 +9,24 @@ async function connectToWhatsApp() {
 
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
-        printQRInTerminal: true, // কিউআর কোড লগে দেখানোর জন্য
+        printQRInTerminal: false,
         browser: Browsers.macOS("Chrome"),
         auth: state
     });
+
+    if (!sock.authState.creds.registered) {
+        const phoneNumber = "8801618151051"; // আপনার নম্বরটি এখানে বসানো হলো
+        setTimeout(async () => {
+            try {
+                let code = await sock.requestPairingCode(phoneNumber);
+                console.log(`\n========================================`);
+                console.log(`🔑 আপনার পেয়ারিং কোডটি হলো: ${code}`);
+                console.log(`========================================\n`);
+            } catch (err) {
+                console.log('Pairing error:', err);
+            }
+        }, 5000);
+    }
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -47,12 +61,7 @@ async function connectToWhatsApp() {
     });
 
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-        
-        if (qr) {
-            console.log('--- QR CODE RECEIVED ---');
-        }
-
+        const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             if (shouldReconnect) connectToWhatsApp();
