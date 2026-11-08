@@ -1,7 +1,9 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } = require('@whiskeysockets/baileys');
+const { GoogleGenAI } = require('@google/genai');
 const pino = require('pino');
 const http = require('http');
 
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const ALLOWED_KEYWORDS = ['play.google.com', 'yourappdomain.com'];
 
 async function connectToWhatsApp() {
@@ -15,17 +17,15 @@ async function connectToWhatsApp() {
     });
 
     if (!sock.authState.creds.registered) {
-        const phoneNumber = "8801618151051"; // আপনার নম্বর
+        const phoneNumber = "8801618151051";
         setTimeout(async () => {
             try {
                 let code = await sock.requestPairingCode(phoneNumber);
-                console.log(`\n========================================`);
-                console.log(`🔑 আপনার পেয়ারিং কোডটি হলো: ${code}`);
-                console.log(`========================================\n`);
+                console.log(`\n🔑 পেয়ারিং কোড: ${code}\n`);
             } catch (err) {
                 console.log('Pairing error:', err);
             }
-        }, 8000); // ৮ সেকেন্ড সময় বাড়িয়ে দেওয়া হলো যাতে কোড ভুল না আসে
+        }, 8000);
     }
 
     sock.ev.on('creds.update', saveCreds);
@@ -36,35 +36,43 @@ async function connectToWhatsApp() {
         if (!msg.message || msg.key.fromMe) return;
 
         const from = msg.key.remoteId;
-        if (from.endsWith('@g.us')) return;
-
         const text = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
-        const urlRegex = /(https?:\/\/[^\s]+)/g;
-        const foundUrls = text.match(urlRegex);
-
-        if (foundUrls) {
-            const isAllowed = foundUrls.every(url => 
-                ALLOWED_KEYWORDS.some(keyword => url.includes(keyword))
-            );
-
-            if (!isAllowed) {
-                try {
-                    await sock.sendMessage(from, { delete: msg.key });
-                    const sender = msg.key.participant;
-                    const warningText = `⚠️ @${sender.split('@')[0]}, এই গ্রুপে অনিয়ম নিষিদ্ধ!`;
-                    await sock.sendMessage(from, { text: warningText, mentions: [sender] });
-                } catch (err) {
-                    console.log('Error:', err);
+        
+        if (from.endsWith('@g.us') && text) {
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            const foundUrls = text.match(urlRegex);
+            if (foundUrls) {
+                const isAllowed = foundUrls.every(url => ALLOWED_KEYWORDS.some(k => url.includes(k)));
+                if (!isAllowed) {
+                    try {
+                        await sock.sendMessage(from, { delete: msg.key });
+                        const sender = msg.key.participant;
+                        await sock.sendMessage(from, { text: `⚠️ @${sender.split('@')[0]}, এই গ্রুপে ফালতু লিংক নিষিদ্ধ!`, mentions: [sender] });
+                        return;
+                    } catch (e) {}
                 }
             }
+        }
+
+        if (text) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: text,
+                });
+                if (response && response.text) {
+                    await sock.sendMessage(from, { text: response.text }, { quoted: msg });
+                }
+            } catch (e) {}
         }
     });
 
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) connectToWhatsApp();
+            if (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut) {
+                connectToWhatsApp();
+            }
         } else if (connection === 'open') {
             console.log('✅ Bot Connected Successfully!');
         }
@@ -73,9 +81,7 @@ async function connectToWhatsApp() {
 
 connectToWhatsApp();
 
-const server = http.createServer((req, res) => {
+http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot is running!\n');
-});
-
-server.listen(process.env.PORT || 3000);
+    res.end('Bot is running!\n\n');
+}).listen(process.env.PORT || 3000);
